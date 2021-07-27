@@ -7,11 +7,11 @@ import (
 	"gonum.org/v1/gonum/stat/distuv"
 	"math"
 	"neural-net-go/matutil"
-	"time"
 )
 
 func main() {
-	seed := uint64(time.Now().UnixNano())
+	var seed uint64
+	//seed = uint64(time.Now().UnixNano())
 	nn := NewNetwork(Config{
 		input:  3,
 		hidden: 4,
@@ -24,19 +24,19 @@ func main() {
 	fmt.Printf("seed: %d, %+v", seed, p)
 }
 
-type Network struct {
-	cfg Config
-	src rand.Source
-	hiddenWeights *mat.Dense
-	outputWeights *mat.Dense
-}
-
 type Config struct {
 	input int
 	hidden int
 	output int
 	rate float64
 	seed uint64
+}
+
+type Network struct {
+	cfg Config
+	src rand.Source
+	hiddenWeights *mat.Dense
+	outputWeights *mat.Dense
 }
 
 func NewNetwork(cfg Config) Network {
@@ -50,34 +50,49 @@ func NewNetwork(cfg Config) Network {
 }
 
 func (n Network) Predict(inputData []float64) *mat.Dense {
-	inputs := mat.NewDense(len(inputData), 1, inputData)
-	hiddenInputs := matutil.Dot(n.hiddenWeights, inputs)
-	hiddenOutputs := matutil.Apply(sigmoid, hiddenInputs)
-	finalInputs := matutil.Dot(n.outputWeights, hiddenOutputs)
-	return matutil.Apply(sigmoid, finalInputs)
+	inputs := vectorToMatrix(inputData)
+	_, finalOutputs := propagateForwards(inputs, n.hiddenWeights, n.outputWeights)
+	return finalOutputs
 }
 
 func (n *Network) Train(inputData []float64, targetData []float64) {
-	inputs := mat.NewDense(len(inputData), 1, inputData)
-	hiddenInputs := matutil.Dot(n.hiddenWeights, inputs)
-	hiddenOutputs := matutil.Apply(sigmoid, hiddenInputs)
-	finalInputs := matutil.Dot(n.outputWeights, hiddenOutputs)
-	finalOutputs := matutil.Apply(sigmoid, finalInputs)
+	inputs := vectorToMatrix(inputData)
+	targets := vectorToMatrix(targetData)
 
-	targets := mat.NewDense(len(targetData), 1, targetData)
-	outputErrors := matutil.Subtract(targets, finalOutputs)
-	hiddenErrors := matutil.Dot(n.outputWeights.T(), outputErrors)
+	hiddenOutputs, finalOutputs := propagateForwards(inputs, n.hiddenWeights, n.outputWeights)
+	outputErrors, hiddenErrors := findErrors(targets, finalOutputs, n.outputWeights)
+	n.outputWeights, n.hiddenWeights = propagateBackwards(n.outputWeights, finalOutputs, outputErrors, hiddenOutputs, n.hiddenWeights, hiddenErrors, inputs, n.cfg.rate)
+}
 
-	// backpropagate
-	n.outputWeights = matutil.Add(n.outputWeights,
-		matutil.Scale(n.cfg.rate,
-			matutil.Dot(matutil.Multiply(outputErrors, sigmoidPrime(finalOutputs)),
-				hiddenOutputs.T())))
+func propagateBackwards(outputWeights, finalOutputs, outputErrors, hiddenOutputs, hiddenWeights, hiddenErrors, inputs mat.Matrix, rate float64) (adjustedOutputWeights, adjustedHiddenWeights *mat.Dense) {
+	adjustedOutputWeights = backward(finalOutputs, outputErrors, outputWeights, hiddenOutputs, rate)
+	adjustedHiddenWeights = backward(hiddenOutputs, hiddenErrors, hiddenWeights, inputs, rate)
+	return adjustedOutputWeights, adjustedHiddenWeights
+}
 
-	n.hiddenWeights = matutil.Add(n.hiddenWeights,
-		matutil.Scale(n.cfg.rate,
-			matutil.Dot(matutil.Multiply(hiddenErrors, sigmoidPrime(hiddenOutputs)),
-				inputs.T())))
+func propagateForwards(inputs, hiddenWeights, outputWeights mat.Matrix) (hiddenOutputs, finalOutputs *mat.Dense) {
+	hiddenOutputs = forward(inputs, hiddenWeights)
+	finalOutputs = forward(hiddenOutputs, outputWeights)
+	return hiddenOutputs, finalOutputs
+}
+
+func backward(outputs, errors, weights, inputs mat.Matrix, learningRate float64) *mat.Dense {
+	multiply := matutil.Multiply(errors, sigmoidPrime(outputs))
+	dot := matutil.Dot(multiply, inputs.T())
+	scale := matutil.Scale(learningRate, dot)
+	adjusted := matutil.Add(weights, scale)
+	return adjusted
+}
+
+func findErrors(targets mat.Matrix, finalOutputs mat.Matrix, outputWeights mat.Matrix) (outputErrors, hiddenErrors *mat.Dense) {
+	outputErrors = matutil.Subtract(targets, finalOutputs)
+	hiddenErrors = matutil.Dot(outputWeights.T(), outputErrors)
+	return outputErrors, hiddenErrors
+}
+
+func forward(inputs mat.Matrix, inputWeights mat.Matrix) *mat.Dense {
+	rawOutputs := matutil.Dot(inputWeights, inputs)
+	return matutil.Apply(sigmoid, rawOutputs)
 }
 
 func sigmoid(_, _ int, z float64) float64 {
@@ -105,4 +120,8 @@ func randomArray(size int, v float64, src rand.Source) []float64 {
 		data[i] = dist.Rand()
 	}
 	return data
+}
+
+func vectorToMatrix(v []float64) *mat.Dense {
+	return mat.NewDense(len(v), 1, v)
 }
