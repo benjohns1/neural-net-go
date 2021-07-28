@@ -54,3 +54,8 @@ func AddScalar(i float64, m mat.Matrix) *mat.Dense {
 	n := mat.NewDense(r, c, a)
 	return Add(m, n)
 }
+
+// FromVector creates a single-column matrix from a vector.
+func FromVector(v []float64) *mat.Dense {
+	return mat.NewDense(len(v), 1, v)
+}
