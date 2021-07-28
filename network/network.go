@@ -1,17 +1,12 @@
 package network
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"golang.org/x/exp/rand"
 	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/gonum/stat/distuv"
-	"io/ioutil"
 	"math"
 	"neural-net-go/matutil"
-	"os"
-	"strings"
 )
 
 // Config network constructor.
@@ -26,19 +21,38 @@ type Config struct {
 // Network struct.
 type Network struct {
 	cfg           Config
-	src           rand.Source
 	hiddenWeights *mat.Dense
 	outputWeights *mat.Dense
 }
 
-// New constructs a new network from a config.
-func New(cfg Config) Network {
+// NewRandom constructs a new network with random weights from a config.
+func NewRandom(cfg Config) Network {
 	src := rand.NewSource(cfg.Seed)
+	weights := []*mat.Dense{
+		mat.NewDense(cfg.Hidden, cfg.Input, randomArray(cfg.Input*cfg.Hidden, float64(cfg.Input), src)),
+		mat.NewDense(cfg.Output, cfg.Hidden, randomArray(cfg.Hidden*cfg.Output, float64(cfg.Hidden), src)),
+	}
+	return New(cfg, weights)
+}
+
+// New constructs a new network with the specified layer weights.
+func New(cfg Config, weights []*mat.Dense) Network {
+	weightLen := len(weights)
+	if weightLen != 2 {
+		panic("network weights must be 2 (until multiple layers are implemented)")
+	}
+	ri, ci := weights[0].Dims()
+	if ri * ci != cfg.Input * cfg.Hidden {
+		panic(fmt.Sprintf("hidden size %d doesn't match layer 0 weight count %d", cfg.Input * cfg.Hidden, ri * ci))
+	}
+	rh, ch := weights[1].Dims()
+	if rh * ch != cfg.Hidden * cfg.Output {
+		panic(fmt.Sprintf("output size %d doesn't match layer 1 weight count %d", cfg.Hidden * cfg.Output, rh * ch))
+	}
 	return Network{
 		cfg:           cfg,
-		src:           src,
-		hiddenWeights: mat.NewDense(cfg.Hidden, cfg.Input, randomArray(cfg.Input*cfg.Hidden, float64(cfg.Input), src)),
-		outputWeights: mat.NewDense(cfg.Output, cfg.Hidden, randomArray(cfg.Hidden*cfg.Output, float64(cfg.Hidden), src)),
+		hiddenWeights: weights[0],
+		outputWeights: weights[1],
 	}
 }
 
@@ -116,61 +130,3 @@ func randomArray(size int, v float64, src rand.Source) []float64 {
 	}
 	return data
 }
-
-type storage struct {
-	Version uint32 `json:"v"`
-	Config `json:"c"`
-	Layers []jsonMatrix `json:"l"`
-}
-
-type jsonMatrix struct {
-	M *mat.Dense
-}
-
-func (m *jsonMatrix) MarshalJSON() ([]byte, error) {
-	d, err := m.M.MarshalBinary()
-	if err != nil {
-		return d, fmt.Errorf("marshaling matrix: %v", err)
-	}
-	b64 := base64.StdEncoding.EncodeToString(d)
-	return []byte(fmt.Sprintf("\"%s\"", b64)), nil
-}
-
-func (m *jsonMatrix) UnmarshalJSON(data []byte) error {
-	dec, err := base64.StdEncoding.DecodeString(string(data))
-	if err != nil {
-		return fmt.Errorf("base64 decoding: %v", err)
-	}
-	trimmed := strings.Trim(string(dec), "\"")
-	if err := m.M.UnmarshalBinary([]byte(trimmed)); err != nil {
-		return fmt.Errorf("unmarshaling matrix: %v", err)
-	}
-	return nil
-}
-
-// Save a network to disk.
-func (n Network) Save() error {
-	s := storage{
-		Version: 1,
-		Config: n.cfg,
-		Layers: []jsonMatrix{
-			{M: n.hiddenWeights},
-			{M: n.outputWeights},
-		},
-	}
-	data, err := json.Marshal(s)
-	if err != nil {
-		return fmt.Errorf("json marshaling: %v", err)
-	}
-
-	if err := ioutil.WriteFile("network.model", data, os.ModePerm); err != nil {
-		return fmt.Errorf("writing file: %v", err)
-	}
-	return nil
-}
-
-
-//// Load a network from disk.
-//func Load() *Network {
-//
-//}
