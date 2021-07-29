@@ -16,6 +16,7 @@ type Config struct {
 	Output int
 	Rate   float64
 	Seed   uint64
+	Trained uint64
 }
 
 // Network struct.
@@ -26,7 +27,7 @@ type Network struct {
 }
 
 // NewRandom constructs a new network with random weights from a config.
-func NewRandom(cfg Config) Network {
+func NewRandom(cfg Config) *Network {
 	src := rand.NewSource(cfg.Seed)
 	weights := []*mat.Dense{
 		mat.NewDense(cfg.Hidden, cfg.Input, randomArray(cfg.Input*cfg.Hidden, float64(cfg.Input), src)),
@@ -36,7 +37,7 @@ func NewRandom(cfg Config) Network {
 }
 
 // New constructs a new network with the specified layer weights.
-func New(cfg Config, weights []*mat.Dense) Network {
+func New(cfg Config, weights []*mat.Dense) *Network {
 	weightLen := len(weights)
 	if weightLen != 2 {
 		panic("network weights must be 2 (until multiple layers are implemented)")
@@ -49,11 +50,16 @@ func New(cfg Config, weights []*mat.Dense) Network {
 	if rh * ch != cfg.Hidden * cfg.Output {
 		panic(fmt.Sprintf("output size %d doesn't match layer 1 weight count %d", cfg.Hidden * cfg.Output, rh * ch))
 	}
-	return Network{
+	return &Network{
 		cfg:           cfg,
 		hiddenWeights: weights[0],
 		outputWeights: weights[1],
 	}
+}
+
+// Config gets the networks configuration.
+func (n Network) Config() Config {
+	return n.cfg
 }
 
 // Predict outputs from a trained network.
@@ -71,6 +77,13 @@ func (n *Network) Train(input []float64, target []float64) {
 	hiddenOutputs, finalOutputs := propagateForwards(inputs, n.hiddenWeights, n.outputWeights)
 	outputErrors, hiddenErrors := findErrors(targets, finalOutputs, n.outputWeights)
 	n.outputWeights, n.hiddenWeights = propagateBackwards(n.outputWeights, finalOutputs, outputErrors, hiddenOutputs, n.hiddenWeights, hiddenErrors, inputs, n.cfg.Rate)
+
+	n.cfg.Trained++
+}
+
+// Trained returns the number of training runs.
+func (n Network) Trained() uint64 {
+	return n.cfg.Trained
 }
 
 func propagateBackwards(outputWeights, finalOutputs, outputErrors, hiddenOutputs, hiddenWeights, hiddenErrors, inputs mat.Matrix, rate float64) (adjustedOutputWeights, adjustedHiddenWeights *mat.Dense) {

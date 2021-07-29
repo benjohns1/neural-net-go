@@ -11,6 +11,12 @@ import (
 	"strings"
 )
 
+type storage struct {
+	Version uint32 `json:"v"`
+	Config Config `json:"c"`
+	Layers []jsonMatrix `json:"l"`
+}
+
 // SaveFile stores a network to disk.
 func (n Network) SaveFile(path string) error {
 	s := storage{
@@ -34,7 +40,6 @@ func (n Network) SaveFile(path string) error {
 	return nil
 }
 
-
 // LoadFile loads a network from disk.
 func LoadFile(path string) (*Network, error) {
 	data, err := ioutil.ReadFile(path)
@@ -49,14 +54,7 @@ func LoadFile(path string) (*Network, error) {
 	for _, l := range s.Layers {
 		weights = append(weights, l.M)
 	}
-	n := New(s.Config, weights)
-	return &n, nil
-}
-
-type storage struct {
-	Version uint32 `json:"v"`
-	Config Config `json:"c"`
-	Layers []jsonMatrix `json:"l"`
+	return New(s.Config, weights), nil
 }
 
 type jsonMatrix struct {
