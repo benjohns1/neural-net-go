@@ -3,3 +3,6 @@
 *.csv
 datasets
 models
+main
+neural-net-go
+*.exe
