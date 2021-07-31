@@ -13,10 +13,10 @@ func TestDot(t *testing.T) {
 		n mat.Matrix
 	}
 	tests := []struct {
-		name      string
-		args      args
-		want      *mat.Dense
-		wantPanic bool
+		name    string
+		args    args
+		want    *mat.Dense
+		wantErr bool
 	}{
 		{
 			name: "should calculate dot product for 1x1 matrices",
@@ -35,12 +35,12 @@ func TestDot(t *testing.T) {
 			want: mat.NewDense(2, 1, []float64{3, 6}),
 		},
 		{
-			name: "should panic if matrix dimensions to not allow dot product",
+			name: "should error if matrix dimensions to not allow dot product",
 			args: args{
 				m: mat.NewDense(2, 1, []float64{1, 2}),
 				n: mat.NewDense(2, 1, []float64{3, 4}),
 			},
-			wantPanic: true,
+			wantErr: true,
 		},
 		{
 			name: "should calculate dot product for 2x1 and 1x2 matrices",
@@ -61,12 +61,12 @@ func TestDot(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			defer func() {
-				if r := recover(); (r != nil) != tt.wantPanic {
-					t.Errorf("Dot() recovered panic = %v, wantPanic %v", r, tt.wantPanic)
-				}
-			}()
-			if got := Dot(tt.args.m, tt.args.n); !reflect.DeepEqual(got, tt.want) {
+			got, err := Dot(tt.args.m, tt.args.n)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Dot() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Dot() = %+v, want %+v", got, tt.want)
 			}
 		})
@@ -113,7 +113,7 @@ func BenchmarkDot(b *testing.B) {
 	}
 	for _, tt := range tests {
 		b.Run(tt.name, func(b *testing.B) {
-			_ = Dot(tt.args.m, tt.args.n)
+			_, _ = Dot(tt.args.m, tt.args.n)
 		})
 	}
 }

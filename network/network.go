@@ -67,8 +67,11 @@ func (n Network) Predict(inputData []float64) (*mat.Dense, error) {
 	if err != nil {
 		return nil, fmt.Errorf("creating matrix from input data: %v", err)
 	}
-	_, finalOutputs := propagateForwards(inputs, n.weights[0], n.weights[1])
-	return finalOutputs, nil
+	outputs, err := propagateForwards(inputs, n.weights)
+	if err != nil {
+		return nil, err
+	}
+	return outputs[len(outputs)-1], nil
 }
 
 // Train the network with a single set of inputs and target outputs.
@@ -82,9 +85,19 @@ func (n *Network) Train(input []float64, target []float64) error {
 		return fmt.Errorf("creating target matrix: %v", err)
 	}
 
-	hiddenOutputs, finalOutputs := propagateForwards(inputs, n.weights[0], n.weights[1])
-	outputErrors, hiddenErrors := findErrors(targets, finalOutputs, n.weights[1])
-	n.weights[1], n.weights[0] = propagateBackwards(n.weights[1], finalOutputs, outputErrors, hiddenOutputs, n.weights[0], hiddenErrors, inputs, n.cfg.Rate)
+	layerOutputs, err := propagateForwards(inputs, n.weights)
+	if err != nil {
+		return err
+	}
+	finalOutputs := layerOutputs[len(layerOutputs)-1]
+	errors, err := findErrors(targets, finalOutputs, n.weights)
+	if err != nil {
+		return fmt.Errorf("finding errors: %v", err)
+	}
+	n.weights, err = propagateBackwards(n.weights, errors, layerOutputs, inputs, n.cfg.Rate)
+	if err != nil {
+		return err
+	}
 
 	n.cfg.Trained++
 
@@ -96,46 +109,97 @@ func (n Network) Trained() uint64 {
 	return n.cfg.Trained
 }
 
-func propagateBackwards(outputWeights, finalOutputs, outputErrors, hiddenOutputs, hiddenWeights, hiddenErrors, inputs mat.Matrix, rate float64) (adjustedOutputWeights, adjustedHiddenWeights *mat.Dense) {
-	adjustedOutputWeights = backward(finalOutputs, outputErrors, outputWeights, hiddenOutputs, rate)
-	adjustedHiddenWeights = backward(hiddenOutputs, hiddenErrors, hiddenWeights, inputs, rate)
-	return adjustedOutputWeights, adjustedHiddenWeights
+func propagateBackwards(weights, errors, outputs []*mat.Dense, inputs mat.Matrix, rate float64) ([]*mat.Dense, error) {
+	adjustedWeights := make([]*mat.Dense, len(weights))
+
+	var err error
+	for i := len(weights) - 1; i >= 1; i-- {
+		adjustedWeights[i], err = backward(outputs[i], errors[i], weights[i], outputs[i-1], rate)
+		if err != nil {
+			return nil, err
+		}
+	}
+	adjustedWeights[0], err = backward(outputs[0], errors[0], weights[0], inputs, rate)
+	if err != nil {
+		return nil, err
+	}
+
+	return adjustedWeights, nil
 }
 
-func propagateForwards(inputs, hiddenWeights, outputWeights mat.Matrix) (hiddenOutputs, finalOutputs *mat.Dense) {
-	hiddenOutputs = forward(inputs, hiddenWeights)
-	finalOutputs = forward(hiddenOutputs, outputWeights)
-	return hiddenOutputs, finalOutputs
+func propagateForwards(inputs mat.Matrix, weights []*mat.Dense) ([]*mat.Dense, error) {
+	outputs := make([]*mat.Dense, 0, len(weights))
+	for _, weight := range weights {
+		layerOutput, err := forward(inputs, weight)
+		if err != nil {
+			return nil, err
+		}
+		outputs = append(outputs, layerOutput)
+		inputs = layerOutput
+	}
+	return outputs, nil
 }
 
-func backward(outputs, errors, weights, inputs mat.Matrix, learningRate float64) *mat.Dense {
-	multiply := matutil.Multiply(errors, sigmoidPrime(outputs))
-	dot := matutil.Dot(multiply, inputs.T())
+func backward(outputs, errors, weights, inputs mat.Matrix, learningRate float64) (*mat.Dense, error) {
+	actDer, err := sigmoidPrime(outputs)
+	if err != nil {
+		return nil, fmt.Errorf("applying activation derivative: %v", err)
+	}
+	multiply, err := matutil.Multiply(errors, actDer)
+	if err != nil {
+		return nil, fmt.Errorf("applying errors to activation derivative: %v", err)
+	}
+	dot, err := matutil.Dot(multiply, inputs.T())
+	if err != nil {
+		return nil, fmt.Errorf("applying activated errors to inputs: %v", err)
+	}
 	scale := matutil.Scale(learningRate, dot)
 	adjusted := matutil.Add(weights, scale)
-	return adjusted
+	return adjusted, nil
 }
 
-func findErrors(targets mat.Matrix, finalOutputs mat.Matrix, outputWeights mat.Matrix) (outputErrors, hiddenErrors *mat.Dense) {
-	outputErrors = matutil.Subtract(targets, finalOutputs)
-	hiddenErrors = matutil.Dot(outputWeights.T(), outputErrors)
-	return outputErrors, hiddenErrors
+func findErrors(targets mat.Matrix, finalOutputs mat.Matrix, weights []*mat.Dense) ([]*mat.Dense, error) {
+	errors := make([]*mat.Dense, len(weights))
+	lastErrors, err := matutil.Subtract(targets, finalOutputs)
+	if err != nil {
+		return nil, fmt.Errorf("subtracting target from final outputs: %v", err)
+	}
+	for i := len(weights) - 1; i >= 1; i-- {
+		errors[i] = lastErrors
+		lastErrors, err = matutil.Dot(weights[i].T(), lastErrors)
+		if err != nil {
+			return nil, err
+		}
+	}
+	errors[0] = lastErrors
+	return errors, nil
 }
 
-func forward(inputs mat.Matrix, inputWeights mat.Matrix) *mat.Dense {
-	rawOutputs := matutil.Dot(inputWeights, inputs)
-	return matutil.Apply(sigmoid, rawOutputs)
+func forward(inputs mat.Matrix, weights mat.Matrix) (*mat.Dense, error) {
+	rawOutputs, err := matutil.Dot(weights, inputs)
+	if err != nil {
+		return nil, fmt.Errorf("applying weights: %v", err)
+	}
+	outputs, err := matutil.Apply(sigmoid, rawOutputs)
+	if err != nil {
+		return nil, fmt.Errorf("applying activation function: %v", err)
+	}
+	return outputs, nil
 }
 
 func sigmoid(_, _ int, z float64) float64 {
 	return 1.0 / (1 + math.Exp(-1*z))
 }
-func sigmoidPrime(m mat.Matrix) *mat.Dense {
+func sigmoidPrime(m mat.Matrix) (*mat.Dense, error) {
 	rows, _ := m.Dims()
 	o := make([]float64, rows)
 	for i := range o {
 		o[i] = 1
 	}
 	ones := mat.NewDense(rows, 1, o)
-	return matutil.Multiply(m, matutil.Subtract(ones, m)) // m * (1 - m)
+	sub, err := matutil.Subtract(ones, m)
+	if err != nil {
+		return nil, err
+	}
+	return matutil.Multiply(m, sub) // m * (1 - m)
 }
