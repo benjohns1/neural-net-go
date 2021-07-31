@@ -9,20 +9,18 @@ import (
 func TestLoadFile(t *testing.T) {
 	tests := []struct {
 		name    string
-		save network.Network
-		assert func(*testing.T, *network.Network)
+		save    *network.Network
+		assert  func(*testing.T, *network.Network)
 		wantErr bool
 	}{
 		{
 			name: "should load from saved file",
 			save: network.NewRandom(network.Config{
-				Input:  3,
-				Hidden: 2,
-				Output: 1,
-				Seed:   0,
+				LayerCounts: []int{3, 2, 1},
+				Seed:        0,
 			}),
 			assert: func(t *testing.T, n *network.Network) {
-				p := n.Predict([]float64{0,0,0})
+				p := n.Predict([]float64{0, 0, 0})
 				got := p.RawMatrix().Data
 				want := []float64{0.5864282096612484}
 				if !reflect.DeepEqual(got, want) {

@@ -31,9 +31,7 @@ func mnistRun() error {
 	} else if os.IsNotExist(err) {
 		log.Printf("no existing model file found at %s, creating new network with random weights...", *model)
 		n = network.NewRandom(network.Config{
-			Input:  784,
-			Hidden: 100,
-			Output: 10,
+			LayerCounts: []int{784,100,10},
 			Rate:   0.1,
 			Seed:   0,
 		})
@@ -70,8 +68,8 @@ func mnistTrain(net *network.Network, epochs int, filename string) error {
 	start := time.Now()
 	const mnistOutput = 10
 	cfg := net.Config()
-	if cfg.Output != mnistOutput {
-		return fmt.Errorf("mnist requires output of 10, got %d", cfg.Output)
+	if cfg.LayerCounts[2] != mnistOutput {
+		return fmt.Errorf("mnist requires output of 10, got %d", cfg.LayerCounts[2])
 	}
 	log.Printf("training %d epochs", epochs)
 	for e := 1; e <= epochs; e++ {
@@ -109,7 +107,7 @@ func mnistTest(net *network.Network, filename string) error {
 		if err == io.EOF {
 			break
 		}
-		inputs := make([]float64, cfg.Input)
+		inputs := make([]float64, cfg.LayerCounts[0])
 		for i := range inputs {
 			if i == 0 {
 				inputs[i] = 1.0
@@ -123,7 +121,7 @@ func mnistTest(net *network.Network, filename string) error {
 		outputs := net.Predict(inputs)
 		answer := 0
 		highest := 0.0
-		for i := 0; i < cfg.Output; i++ {
+		for i := 0; i < cfg.LayerCounts[2]; i++ {
 			val := outputs.At(i, 0)
 			if val > highest {
 				answer = i
@@ -183,11 +181,11 @@ func mnistTrainEpoch(net *network.Network, e int, filename string, cfg network.C
 }
 
 func mnistTrainingInputs(record []string, cfg network.Config) ([]float64, error) {
-	if len(record)-1 != cfg.Input {
-		return nil, fmt.Errorf("mismatched network inputs: need %d, got %d", len(record)-1, cfg.Input)
+	if len(record)-1 != cfg.LayerCounts[0] {
+		return nil, fmt.Errorf("mismatched network inputs: need %d, got %d", len(record)-1, cfg.LayerCounts[0])
 	}
-	inputs := make([]float64, cfg.Input)
-	for i := 1; i < cfg.Input; i++ {
+	inputs := make([]float64, cfg.LayerCounts[0])
+	for i := 1; i < cfg.LayerCounts[0]; i++ {
 		x, err := strconv.ParseFloat(record[i], 64)
 		if err != nil {
 			return nil, fmt.Errorf("record parse: %v", err)

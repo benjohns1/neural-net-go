@@ -2,21 +2,19 @@ package network
 
 import (
 	"fmt"
-	"golang.org/x/exp/rand"
-	"gonum.org/v1/gonum/mat"
-	"gonum.org/v1/gonum/stat/distuv"
 	"math"
 	"neural-net-go/matutil"
+
+	"golang.org/x/exp/rand"
+	"gonum.org/v1/gonum/mat"
 )
 
 // Config network constructor.
 type Config struct {
-	Input  int
-	Hidden int
-	Output int
-	Rate   float64
-	Seed   uint64
-	Trained uint64
+	LayerCounts []int
+	Rate        float64
+	Seed        uint64
+	Trained     uint64
 }
 
 // Network struct.
@@ -30,8 +28,8 @@ type Network struct {
 func NewRandom(cfg Config) *Network {
 	src := rand.NewSource(cfg.Seed)
 	weights := []*mat.Dense{
-		mat.NewDense(cfg.Hidden, cfg.Input, randomArray(cfg.Input*cfg.Hidden, float64(cfg.Input), src)),
-		mat.NewDense(cfg.Output, cfg.Hidden, randomArray(cfg.Hidden*cfg.Output, float64(cfg.Hidden), src)),
+		mat.NewDense(cfg.LayerCounts[1], cfg.LayerCounts[0], matutil.RandomArray(cfg.LayerCounts[0]*cfg.LayerCounts[1], float64(cfg.LayerCounts[0]), matutil.OptRandomArraySource(src))),
+		mat.NewDense(cfg.LayerCounts[2], cfg.LayerCounts[1], matutil.RandomArray(cfg.LayerCounts[1]*cfg.LayerCounts[2], float64(cfg.LayerCounts[1]), matutil.OptRandomArraySource(src))),
 	}
 	return New(cfg, weights)
 }
@@ -43,12 +41,12 @@ func New(cfg Config, weights []*mat.Dense) *Network {
 		panic("network weights must be 2 (until multiple layers are implemented)")
 	}
 	ri, ci := weights[0].Dims()
-	if ri * ci != cfg.Input * cfg.Hidden {
-		panic(fmt.Sprintf("hidden size %d doesn't match layer 0 weight count %d", cfg.Input * cfg.Hidden, ri * ci))
+	if ri*ci != cfg.LayerCounts[0]*cfg.LayerCounts[1] {
+		panic(fmt.Sprintf("hidden size %d doesn't match layer 0 weight count %d", cfg.LayerCounts[0]*cfg.LayerCounts[1], ri*ci))
 	}
 	rh, ch := weights[1].Dims()
-	if rh * ch != cfg.Hidden * cfg.Output {
-		panic(fmt.Sprintf("output size %d doesn't match layer 1 weight count %d", cfg.Hidden * cfg.Output, rh * ch))
+	if rh*ch != cfg.LayerCounts[1]*cfg.LayerCounts[2] {
+		panic(fmt.Sprintf("output size %d doesn't match layer 1 weight count %d", cfg.LayerCounts[1]*cfg.LayerCounts[2], rh*ch))
 	}
 	return &Network{
 		cfg:           cfg,
@@ -128,18 +126,4 @@ func sigmoidPrime(m mat.Matrix) *mat.Dense {
 	}
 	ones := mat.NewDense(rows, 1, o)
 	return matutil.Multiply(m, matutil.Subtract(ones, m)) // m * (1 - m)
-}
-
-func randomArray(size int, v float64, src rand.Source) []float64 {
-	sqrtV := math.Sqrt(v)
-	dist := distuv.Uniform{
-		Min: -1 / sqrtV,
-		Max: 1 / sqrtV,
-		Src: src,
-	}
-	data := make([]float64, size)
-	for i := size - 1; i >= 0; i-- {
-		data[i] = dist.Rand()
-	}
-	return data
 }

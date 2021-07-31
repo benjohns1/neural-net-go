@@ -1,6 +1,8 @@
 package matutil
 
-import "gonum.org/v1/gonum/mat"
+import (
+	"gonum.org/v1/gonum/mat"
+)
 
 // Dot product of 2 matrices.
 func Dot(m, n mat.Matrix) *mat.Dense {
