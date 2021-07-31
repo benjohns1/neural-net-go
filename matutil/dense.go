@@ -1,6 +1,8 @@
 package matutil
 
 import (
+	"fmt"
+
 	"gonum.org/v1/gonum/mat"
 )
 
@@ -58,6 +60,10 @@ func AddScalar(i float64, m mat.Matrix) *mat.Dense {
 }
 
 // FromVector creates a single-column matrix from a vector.
-func FromVector(v []float64) *mat.Dense {
-	return mat.NewDense(len(v), 1, v)
+func FromVector(v []float64) (*mat.Dense, error) {
+	l := len(v)
+	if l == 0 {
+		return nil, fmt.Errorf("vector length is zero, cannot create matrix")
+	}
+	return mat.NewDense(l, 1, v), nil
 }

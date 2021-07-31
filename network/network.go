@@ -5,54 +5,55 @@ import (
 	"math"
 	"neural-net-go/matutil"
 
-	"golang.org/x/exp/rand"
 	"gonum.org/v1/gonum/mat"
 )
 
 // Config network constructor.
 type Config struct {
+	InputCount  int
 	LayerCounts []int
 	Rate        float64
-	Seed        uint64
+	RandSeed    uint64
+	RandState   uint64
 	Trained     uint64
 }
 
 // Network struct.
 type Network struct {
-	cfg           Config
-	hiddenWeights *mat.Dense
-	outputWeights *mat.Dense
+	cfg     Config
+	weights []*mat.Dense // hidden and output layers
 }
 
 // NewRandom constructs a new network with random weights from a config.
-func NewRandom(cfg Config) *Network {
-	src := rand.NewSource(cfg.Seed)
-	weights := []*mat.Dense{
-		mat.NewDense(cfg.LayerCounts[1], cfg.LayerCounts[0], matutil.RandomArray(cfg.LayerCounts[0]*cfg.LayerCounts[1], float64(cfg.LayerCounts[0]), matutil.OptRandomArraySource(src))),
-		mat.NewDense(cfg.LayerCounts[2], cfg.LayerCounts[1], matutil.RandomArray(cfg.LayerCounts[1]*cfg.LayerCounts[2], float64(cfg.LayerCounts[1]), matutil.OptRandomArraySource(src))),
+func NewRandom(cfg Config) (*Network, error) {
+	src := Rand{cfg.RandSeed, cfg.RandState}.GetSource()
+	weights := make([]*mat.Dense, 0, len(cfg.LayerCounts))
+	count := cfg.InputCount
+	for _, nextCount := range cfg.LayerCounts {
+		weights = append(weights, mat.NewDense(nextCount, count, matutil.RandomArray(nextCount*count, float64(count), matutil.OptRandomArraySource(src))))
+		count = nextCount
 	}
 	return New(cfg, weights)
 }
 
 // New constructs a new network with the specified layer weights.
-func New(cfg Config, weights []*mat.Dense) *Network {
-	weightLen := len(weights)
-	if weightLen != 2 {
-		panic("network weights must be 2 (until multiple layers are implemented)")
+func New(cfg Config, weights []*mat.Dense) (*Network, error) {
+	if len(weights) != len(cfg.LayerCounts) {
+		return nil, fmt.Errorf("layer weight count '%d' must be equal configured layer count '%d'", len(weights), len(cfg.LayerCounts))
 	}
-	ri, ci := weights[0].Dims()
-	if ri*ci != cfg.LayerCounts[0]*cfg.LayerCounts[1] {
-		panic(fmt.Sprintf("hidden size %d doesn't match layer 0 weight count %d", cfg.LayerCounts[0]*cfg.LayerCounts[1], ri*ci))
-	}
-	rh, ch := weights[1].Dims()
-	if rh*ch != cfg.LayerCounts[1]*cfg.LayerCounts[2] {
-		panic(fmt.Sprintf("output size %d doesn't match layer 1 weight count %d", cfg.LayerCounts[1]*cfg.LayerCounts[2], rh*ch))
+	previousCount := cfg.InputCount
+	for i, weight := range weights {
+		currentCount := cfg.LayerCounts[i]
+		rc, cc := weight.Dims()
+		if rc*cc != previousCount*currentCount {
+			return nil, fmt.Errorf("layer %d size %d must equal layer 0 weight count %d", i, previousCount*currentCount, rc*cc)
+		}
+		previousCount = currentCount
 	}
 	return &Network{
-		cfg:           cfg,
-		hiddenWeights: weights[0],
-		outputWeights: weights[1],
-	}
+		cfg:     cfg,
+		weights: weights,
+	}, nil
 }
 
 // Config gets the networks configuration.
@@ -61,22 +62,33 @@ func (n Network) Config() Config {
 }
 
 // Predict outputs from a trained network.
-func (n Network) Predict(inputData []float64) *mat.Dense {
-	inputs := matutil.FromVector(inputData)
-	_, finalOutputs := propagateForwards(inputs, n.hiddenWeights, n.outputWeights)
-	return finalOutputs
+func (n Network) Predict(inputData []float64) (*mat.Dense, error) {
+	inputs, err := matutil.FromVector(inputData)
+	if err != nil {
+		return nil, fmt.Errorf("creating matrix from input data: %v", err)
+	}
+	_, finalOutputs := propagateForwards(inputs, n.weights[0], n.weights[1])
+	return finalOutputs, nil
 }
 
 // Train the network with a single set of inputs and target outputs.
-func (n *Network) Train(input []float64, target []float64) {
-	inputs := matutil.FromVector(input)
-	targets := matutil.FromVector(target)
+func (n *Network) Train(input []float64, target []float64) error {
+	inputs, err := matutil.FromVector(input)
+	if err != nil {
+		return fmt.Errorf("creating input matrix: %v", err)
+	}
+	targets, err := matutil.FromVector(target)
+	if err != nil {
+		return fmt.Errorf("creating target matrix: %v", err)
+	}
 
-	hiddenOutputs, finalOutputs := propagateForwards(inputs, n.hiddenWeights, n.outputWeights)
-	outputErrors, hiddenErrors := findErrors(targets, finalOutputs, n.outputWeights)
-	n.outputWeights, n.hiddenWeights = propagateBackwards(n.outputWeights, finalOutputs, outputErrors, hiddenOutputs, n.hiddenWeights, hiddenErrors, inputs, n.cfg.Rate)
+	hiddenOutputs, finalOutputs := propagateForwards(inputs, n.weights[0], n.weights[1])
+	outputErrors, hiddenErrors := findErrors(targets, finalOutputs, n.weights[1])
+	n.weights[1], n.weights[0] = propagateBackwards(n.weights[1], finalOutputs, outputErrors, hiddenOutputs, n.weights[0], hiddenErrors, inputs, n.cfg.Rate)
 
 	n.cfg.Trained++
+
+	return nil
 }
 
 // Trained returns the number of training runs.
