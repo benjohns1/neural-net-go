@@ -37,8 +37,8 @@ func Scale(s float64, m mat.Matrix) *mat.Dense {
 	return &o
 }
 
-// Multiply each corresponding element of the matrices together.
-func Multiply(m, n mat.Matrix) (*mat.Dense, error) {
+// MulElem each corresponding element of the matrices together.
+func MulElem(m, n mat.Matrix) (*mat.Dense, error) {
 	var o mat.Dense
 	if err := safe(func() error {
 		o.MulElem(m, n)
@@ -56,8 +56,8 @@ func Add(m, n mat.Matrix) *mat.Dense {
 	return &o
 }
 
-// Subtract the corresponding elements of the second matrix from the first.
-func Subtract(m, n mat.Matrix) (*mat.Dense, error) {
+// Sub the corresponding elements of the second matrix from the first.
+func Sub(m, n mat.Matrix) (*mat.Dense, error) {
 	var o mat.Dense
 	if err := safe(func() error {
 		o.Sub(m, n)
@@ -66,17 +66,6 @@ func Subtract(m, n mat.Matrix) (*mat.Dense, error) {
 		return nil, err
 	}
 	return &o, nil
-}
-
-// AddScalar adds the value to each element in the matrix.
-func AddScalar(i float64, m mat.Matrix) *mat.Dense {
-	r, c := m.Dims()
-	a := make([]float64, r*c)
-	for x := 0; x < r*c; x++ {
-		a[x] = i
-	}
-	n := mat.NewDense(r, c, a)
-	return Add(m, n)
 }
 
 // FromVector creates a single-column matrix from a vector.

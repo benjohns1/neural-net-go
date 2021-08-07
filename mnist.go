@@ -21,7 +21,7 @@ type mnistRunConfig struct {
 	Epochs      int
 }
 
-func mnistParseCmdFlags() mnistRunConfig {
+func mnistParseCmdFlags() (mnistRunConfig, error) {
 	action := flag.String("action", "", "Action 'train' or 'test' against the dataset.")
 	model := flag.String("model", "models/mnist.default.model", "File path of network model to load and save. If it doesn't exist a new network will be created.")
 	dataset := flag.String("dataset", "", "File path of source dataset. (Defaults to datasets/mnist_*.csv where * is the action chosen.)")
@@ -34,7 +34,8 @@ func mnistParseCmdFlags() mnistRunConfig {
 		case "test":
 			*dataset = "datasets/mnist_test.csv"
 		default:
-			panic(fmt.Sprintf("unknown action '%s'", *action))
+			flag.PrintDefaults()
+			return mnistRunConfig{}, fmt.Errorf("unknown action '%s'", *action)
 		}
 	}
 	return mnistRunConfig{
@@ -42,7 +43,7 @@ func mnistParseCmdFlags() mnistRunConfig {
 		ModelFile:   *model,
 		DataSetFile: *dataset,
 		Epochs:      *epochs,
-	}
+	}, nil
 }
 
 func mnistRun(cfg mnistRunConfig) error {

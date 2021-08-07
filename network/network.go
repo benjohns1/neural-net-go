@@ -145,7 +145,7 @@ func backward(outputs, errors, weights, inputs mat.Matrix, learningRate float64)
 	if err != nil {
 		return nil, fmt.Errorf("applying activation derivative: %v", err)
 	}
-	multiply, err := matutil.Multiply(errors, actDer)
+	multiply, err := matutil.MulElem(errors, actDer)
 	if err != nil {
 		return nil, fmt.Errorf("applying errors to activation derivative: %v", err)
 	}
@@ -160,7 +160,7 @@ func backward(outputs, errors, weights, inputs mat.Matrix, learningRate float64)
 
 func findErrors(targets mat.Matrix, finalOutputs mat.Matrix, weights []*mat.Dense) ([]*mat.Dense, error) {
 	errors := make([]*mat.Dense, len(weights))
-	lastErrors, err := matutil.Subtract(targets, finalOutputs)
+	lastErrors, err := matutil.Sub(targets, finalOutputs)
 	if err != nil {
 		return nil, fmt.Errorf("subtracting target from final outputs: %v", err)
 	}
@@ -197,9 +197,9 @@ func sigmoidPrime(m mat.Matrix) (*mat.Dense, error) {
 		o[i] = 1
 	}
 	ones := mat.NewDense(rows, 1, o)
-	sub, err := matutil.Subtract(ones, m)
+	sub, err := matutil.Sub(ones, m)
 	if err != nil {
 		return nil, err
 	}
-	return matutil.Multiply(m, sub) // m * (1 - m)
+	return matutil.MulElem(m, sub) // m * (1 - m)
 }
