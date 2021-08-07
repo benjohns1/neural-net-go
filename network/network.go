@@ -10,14 +10,13 @@ import (
 
 // Config network constructor.
 type Config struct {
-	InputCount          int
-	LayerCounts         []int
-	Activation          ActivationType
-	ActivationLeakyReLU float64
-	Rate                float64
-	RandSeed            uint64
-	RandState           uint64
-	Trained             uint64
+	InputCount  int
+	LayerCounts []int
+	Activation  ActivationType
+	Rate        float64
+	RandSeed    uint64
+	RandState   uint64
+	Trained     uint64
 }
 
 type ActivationType int
@@ -42,7 +41,11 @@ func NewRandom(cfg Config) (*Network, error) {
 	weights := make([]*mat.Dense, 0, len(cfg.LayerCounts))
 	count := cfg.InputCount
 	for _, nextCount := range cfg.LayerCounts {
-		weights = append(weights, mat.NewDense(nextCount, count, matutil.RandomArray(nextCount*count, float64(count), matutil.OptRandomArraySource(src))))
+		next, err := matutil.New(nextCount, count, matutil.RandomArray(nextCount*count, float64(count), matutil.OptRandomArraySource(src)))
+		if err != nil {
+			return nil, fmt.Errorf("creating random matrix with %d rows and %d columns: %v", nextCount, count, err)
+		}
+		weights = append(weights, next)
 		count = nextCount
 	}
 	return New(cfg, weights)

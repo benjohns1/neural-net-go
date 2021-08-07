@@ -8,24 +8,22 @@ import (
 const (
 	mnistInputCount  = 784
 	mnistOutputCount = 10
-	testLogBatch     = 1000
-	trainLogBatch    = 10000
 )
 
-func mnistRun(cfg runConfig) error {
+func mnistPreset(cfg *runConfig) error {
 	cfg.InputCount = mnistInputCount
+	cfg.HiddenLayerCounts = []int{100}
 	cfg.OutputCount = mnistOutputCount
-	cfg.TestLogBatch = testLogBatch
-	cfg.TrainLogBatch = trainLogBatch
+	cfg.TestLogBatch = 1000
+	cfg.TrainLogBatch = 10000
 	cfg.TestParseRecord = parseMnistRecord
 	cfg.TrainParseRecord = parseMnistRecord
-	return run(cfg)
+	cfg.Epochs = 2
+	return nil
 }
 
-type parseRecordFunc func(count int, record []string) (inputs, targets []float64, err error)
-
-func parseMnistRecord(count int, record []string) (inputs, targets []float64, err error) {
-	inputs = make([]float64, count)
+func parseMnistRecord(record []string) (inputs, targets []float64, err error) {
+	inputs = make([]float64, mnistInputCount)
 	for i := range inputs {
 		x, err := strconv.ParseFloat(record[i+1], 64) // ignore first column (which is the label)
 		if err != nil {
@@ -33,7 +31,7 @@ func parseMnistRecord(count int, record []string) (inputs, targets []float64, er
 		}
 		inputs[i] = (x / 255.0 * 0.99) + 0.01
 	}
-	targets, err = mnistTrainingTargets(record[0])
+	targets, err = mnistTrainingTargets(record[0]) // first column is the label
 	if err != nil {
 		return nil, nil, err
 	}

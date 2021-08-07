@@ -19,12 +19,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("mnist config error: %v", err)
 	}
-	if err := mnistRun(cfg); err != nil {
+	if err := csvRun(cfg); err != nil {
 		log.Fatalf("mnist error: %v", err)
 	}
 }
 
-func run(cfg runConfig) error {
+type parseRecordFunc func(record []string) (inputs, targets []float64, err error)
+
+func csvRun(cfg runConfig) error {
 	file := storage.NewJSONFile()
 
 	var n *network.Network
@@ -98,7 +100,6 @@ func test(net *network.Network, filename string, logBatch int, parseRecord parse
 		_ = checkFile.Close()
 	}()
 
-	cfg := net.Config()
 	score := 0
 	total := 0
 	r := csv.NewReader(bufio.NewReader(checkFile))
@@ -113,7 +114,7 @@ func test(net *network.Network, filename string, logBatch int, parseRecord parse
 		if err == io.EOF {
 			break
 		}
-		inputs, targets, err := parseRecord(cfg.InputCount, record)
+		inputs, targets, err := parseRecord(record)
 		if err != nil {
 			return err
 		}
@@ -170,7 +171,7 @@ func trainEpoch(net *network.Network, e int, filename string, cfg network.Config
 	r := csv.NewReader(bufio.NewReader(testFile))
 	line := 0
 	batchStart := time.Now()
-	log.Printf("Epoch %d: training first %d records...", e, trainLogBatch)
+	log.Printf("Epoch %d: training first %d records...", e, logBatch)
 	for {
 		line++
 		if line%logBatch == 0 {
@@ -197,5 +198,5 @@ func trainingInputs(parseRecord parseRecordFunc, count int, record []string) (in
 	if len(record)-1 != count {
 		return nil, nil, fmt.Errorf("mismatched inputs: %d record input values, expecting input count %d", len(record)-1, count)
 	}
-	return parseRecord(count, record)
+	return parseRecord(record)
 }

@@ -6,6 +6,18 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
+// New safely creates a new dense matrix.
+func New(r, c int, data []float64) (*mat.Dense, error) {
+	var o *mat.Dense
+	if err := safe(func() error {
+		o = mat.NewDense(r, c, data)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return o, nil
+}
+
 // Dot product of 2 matrices.
 func Dot(m, n mat.Matrix) (d *mat.Dense, err error) {
 	var o mat.Dense
@@ -84,7 +96,7 @@ func FromVector(v []float64) (*mat.Dense, error) {
 	if l == 0 {
 		return nil, fmt.Errorf("vector length is zero, cannot create matrix")
 	}
-	return mat.NewDense(l, 1, v), nil
+	return New(l, 1, v)
 }
 
 // ToVector creates a vector from a single-column matrix.
