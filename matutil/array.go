@@ -37,3 +37,12 @@ func RandomArray(size int, v float64, opts ...func(*RandomArrayCfg)) []float64 {
 	}
 	return data
 }
+
+// FillArray creates an array of size with all elements equal to the fill value.
+func FillArray(size int, fill float64) []float64 {
+	o := make([]float64, size)
+	for i := range o {
+		o[i] = fill
+	}
+	return o
+}

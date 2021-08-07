@@ -141,7 +141,7 @@ func propagateForwards(inputs mat.Matrix, weights []*mat.Dense) ([]*mat.Dense, e
 }
 
 func backward(outputs, errors, weights, inputs mat.Matrix, learningRate float64) (*mat.Dense, error) {
-	actDer, err := sigmoidPrime(outputs)
+	actDer, err := matSigmoidPrime(outputs)
 	if err != nil {
 		return nil, fmt.Errorf("applying activation derivative: %v", err)
 	}
@@ -188,15 +188,11 @@ func forward(inputs mat.Matrix, weights mat.Matrix) (*mat.Dense, error) {
 }
 
 func sigmoid(_, _ int, z float64) float64 {
-	return 1.0 / (1 + math.Exp(-1*z))
+	return 1.0 / (1.0 + math.Exp(-z))
 }
-func sigmoidPrime(m mat.Matrix) (*mat.Dense, error) {
+func matSigmoidPrime(m mat.Matrix) (*mat.Dense, error) {
 	rows, _ := m.Dims()
-	o := make([]float64, rows)
-	for i := range o {
-		o[i] = 1
-	}
-	ones := mat.NewDense(rows, 1, o)
+	ones := mat.NewDense(rows, 1, matutil.FillArray(rows, 1))
 	sub, err := matutil.Sub(ones, m)
 	if err != nil {
 		return nil, err
