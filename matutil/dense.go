@@ -31,10 +31,15 @@ func Apply(fn func(i, j int, v float64) float64, m mat.Matrix) (d *mat.Dense, er
 }
 
 // Scale each element of a matrix.
-func Scale(s float64, m mat.Matrix) *mat.Dense {
+func Scale(s float64, m mat.Matrix) (*mat.Dense, error) {
 	var o mat.Dense
-	o.Scale(s, m)
-	return &o
+	if err := safe(func() error {
+		o.Scale(s, m)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return &o, nil
 }
 
 // MulElem each corresponding element of the matrices together.
@@ -50,10 +55,15 @@ func MulElem(m, n mat.Matrix) (*mat.Dense, error) {
 }
 
 // Add each corresponding element of the matrices together.
-func Add(m, n mat.Matrix) *mat.Dense {
+func Add(m, n mat.Matrix) (*mat.Dense, error) {
 	var o mat.Dense
-	o.Add(m, n)
-	return &o
+	if err := safe(func() error {
+		o.Add(m, n)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return &o, nil
 }
 
 // Sub the corresponding elements of the second matrix from the first.

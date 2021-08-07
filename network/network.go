@@ -2,26 +2,38 @@ package network
 
 import (
 	"fmt"
-	"math"
 	"neural-net-go/matutil"
+	"neural-net-go/network/activation"
 
 	"gonum.org/v1/gonum/mat"
 )
 
 // Config network constructor.
 type Config struct {
-	InputCount  int
-	LayerCounts []int
-	Rate        float64
-	RandSeed    uint64
-	RandState   uint64
-	Trained     uint64
+	InputCount          int
+	LayerCounts         []int
+	Activation          ActivationType
+	ActivationLeakyReLU float64
+	Rate                float64
+	RandSeed            uint64
+	RandState           uint64
+	Trained             uint64
 }
+
+type ActivationType int
+
+const (
+	ActivationTypeNone ActivationType = iota
+	ActivationTypeSigmoid
+	ActivationTypeTanh
+)
 
 // Network struct.
 type Network struct {
-	cfg     Config
-	weights []*mat.Dense // hidden and output layers
+	cfg                        Config
+	activation                 activationFunc
+	activationMatrixDerivative activationMatrixDerivativeFunc
+	weights                    []*mat.Dense // hidden and output layers
 }
 
 // NewRandom constructs a new network with random weights from a config.
@@ -50,10 +62,40 @@ func New(cfg Config, weights []*mat.Dense) (*Network, error) {
 		}
 		previousCount = currentCount
 	}
+	af, amdf, err := newActivationFuncs(cfg)
+	if err != nil {
+		return nil, err
+	}
 	return &Network{
-		cfg:     cfg,
-		weights: weights,
+		cfg:                        cfg,
+		activation:                 af,
+		activationMatrixDerivative: amdf,
+		weights:                    weights,
 	}, nil
+}
+
+type activationFunc func(_, _ int, v float64) float64
+type activationMatrixDerivativeFunc func(outputs mat.Matrix) (*mat.Dense, error)
+
+type Activation interface {
+	Value(float64) float64
+	MatrixDerivative(outputs mat.Matrix) (*mat.Dense, error)
+}
+
+func newActivationFuncs(cfg Config) (activationFunc, activationMatrixDerivativeFunc, error) {
+	var a Activation
+	switch cfg.Activation {
+	case ActivationTypeNone:
+		fallthrough
+	case ActivationTypeSigmoid:
+		a = activation.Sigmoid{}
+	case ActivationTypeTanh:
+		a = activation.Tanh{}
+	default:
+		return nil, nil, fmt.Errorf("unknown activation type %v", cfg.Activation)
+	}
+
+	return func(_, _ int, v float64) float64 { return a.Value(v) }, a.MatrixDerivative, nil
 }
 
 // Config gets the networks configuration.
@@ -67,7 +109,7 @@ func (n Network) Predict(inputData []float64) (*mat.Dense, error) {
 	if err != nil {
 		return nil, fmt.Errorf("creating matrix from input data: %v", err)
 	}
-	outputs, err := propagateForwards(inputs, n.weights)
+	outputs, err := propagateForwards(inputs, n.weights, n.activation)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +127,7 @@ func (n *Network) Train(input []float64, target []float64) error {
 		return fmt.Errorf("creating target matrix: %v", err)
 	}
 
-	layerOutputs, err := propagateForwards(inputs, n.weights)
+	layerOutputs, err := propagateForwards(inputs, n.weights, n.activation)
 	if err != nil {
 		return err
 	}
@@ -94,7 +136,7 @@ func (n *Network) Train(input []float64, target []float64) error {
 	if err != nil {
 		return fmt.Errorf("finding errors: %v", err)
 	}
-	n.weights, err = propagateBackwards(n.weights, errors, layerOutputs, inputs, n.cfg.Rate)
+	n.weights, err = propagateBackwards(n.weights, errors, layerOutputs, inputs, n.cfg.Rate, n.activationMatrixDerivative)
 	if err != nil {
 		return err
 	}
@@ -109,17 +151,17 @@ func (n Network) Trained() uint64 {
 	return n.cfg.Trained
 }
 
-func propagateBackwards(weights, errors, outputs []*mat.Dense, inputs mat.Matrix, rate float64) ([]*mat.Dense, error) {
+func propagateBackwards(weights, errors, outputs []*mat.Dense, inputs mat.Matrix, rate float64, activationDer activationMatrixDerivativeFunc) ([]*mat.Dense, error) {
 	adjustedWeights := make([]*mat.Dense, len(weights))
 
 	var err error
 	for i := len(weights) - 1; i >= 1; i-- {
-		adjustedWeights[i], err = backward(outputs[i], errors[i], weights[i], outputs[i-1], rate)
+		adjustedWeights[i], err = backward(outputs[i], errors[i], weights[i], outputs[i-1], rate, activationDer)
 		if err != nil {
 			return nil, err
 		}
 	}
-	adjustedWeights[0], err = backward(outputs[0], errors[0], weights[0], inputs, rate)
+	adjustedWeights[0], err = backward(outputs[0], errors[0], weights[0], inputs, rate, activationDer)
 	if err != nil {
 		return nil, err
 	}
@@ -127,10 +169,10 @@ func propagateBackwards(weights, errors, outputs []*mat.Dense, inputs mat.Matrix
 	return adjustedWeights, nil
 }
 
-func propagateForwards(inputs mat.Matrix, weights []*mat.Dense) ([]*mat.Dense, error) {
+func propagateForwards(inputs mat.Matrix, weights []*mat.Dense, activation activationFunc) ([]*mat.Dense, error) {
 	outputs := make([]*mat.Dense, 0, len(weights))
 	for _, weight := range weights {
-		layerOutput, err := forward(inputs, weight)
+		layerOutput, err := forward(inputs, weight, activation)
 		if err != nil {
 			return nil, err
 		}
@@ -140,8 +182,8 @@ func propagateForwards(inputs mat.Matrix, weights []*mat.Dense) ([]*mat.Dense, e
 	return outputs, nil
 }
 
-func backward(outputs, errors, weights, inputs mat.Matrix, learningRate float64) (*mat.Dense, error) {
-	actDer, err := matSigmoidPrime(outputs)
+func backward(outputs, errors, weights, inputs mat.Matrix, learningRate float64, activationDer activationMatrixDerivativeFunc) (*mat.Dense, error) {
+	actDer, err := activationDer(outputs)
 	if err != nil {
 		return nil, fmt.Errorf("applying activation derivative: %v", err)
 	}
@@ -153,8 +195,14 @@ func backward(outputs, errors, weights, inputs mat.Matrix, learningRate float64)
 	if err != nil {
 		return nil, fmt.Errorf("applying activated errors to inputs: %v", err)
 	}
-	scale := matutil.Scale(learningRate, dot)
-	adjusted := matutil.Add(weights, scale)
+	scale, err := matutil.Scale(learningRate, dot)
+	if err != nil {
+		return nil, fmt.Errorf("scaling by learning rate: %v", err)
+	}
+	adjusted, err := matutil.Add(weights, scale)
+	if err != nil {
+		return nil, fmt.Errorf("adding scaled corrections to weights: %v", err)
+	}
 	return adjusted, nil
 }
 
@@ -175,27 +223,14 @@ func findErrors(targets mat.Matrix, finalOutputs mat.Matrix, weights []*mat.Dens
 	return errors, nil
 }
 
-func forward(inputs mat.Matrix, weights mat.Matrix) (*mat.Dense, error) {
+func forward(inputs mat.Matrix, weights mat.Matrix, activation activationFunc) (*mat.Dense, error) {
 	rawOutputs, err := matutil.Dot(weights, inputs)
 	if err != nil {
 		return nil, fmt.Errorf("applying weights: %v", err)
 	}
-	outputs, err := matutil.Apply(sigmoid, rawOutputs)
+	outputs, err := matutil.Apply(activation, rawOutputs)
 	if err != nil {
 		return nil, fmt.Errorf("applying activation function: %v", err)
 	}
 	return outputs, nil
-}
-
-func sigmoid(_, _ int, z float64) float64 {
-	return 1.0 / (1.0 + math.Exp(-z))
-}
-func matSigmoidPrime(m mat.Matrix) (*mat.Dense, error) {
-	rows, _ := m.Dims()
-	ones := mat.NewDense(rows, 1, matutil.FillArray(rows, 1))
-	sub, err := matutil.Sub(ones, m)
-	if err != nil {
-		return nil, err
-	}
-	return matutil.MulElem(m, sub) // m * (1 - m)
 }
