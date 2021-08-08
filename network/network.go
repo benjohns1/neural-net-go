@@ -2,8 +2,9 @@ package network
 
 import (
 	"fmt"
-	"neural-net-go/matutil"
-	"neural-net-go/network/activation"
+
+	"github.com/benjohns1/neural-net-go/matutil"
+	"github.com/benjohns1/neural-net-go/network/activation"
 
 	"gonum.org/v1/gonum/mat"
 )

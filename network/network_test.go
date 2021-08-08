@@ -1,10 +1,11 @@
 package network_test
 
 import (
-	"neural-net-go/matutil"
-	"neural-net-go/network"
 	"reflect"
 	"testing"
+
+	"github.com/benjohns1/neural-net-go/matutil"
+	"github.com/benjohns1/neural-net-go/network"
 )
 
 func TestNetwork_Predict(t *testing.T) {

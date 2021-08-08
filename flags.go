@@ -3,9 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
-	"neural-net-go/network"
 	"strconv"
 	"strings"
+
+	"github.com/benjohns1/neural-net-go/network"
 )
 
 type runConfig struct {

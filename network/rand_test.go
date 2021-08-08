@@ -1,8 +1,9 @@
 package network_test
 
 import (
-	"neural-net-go/network"
 	"testing"
+
+	"github.com/benjohns1/neural-net-go/network"
 )
 
 func TestRand_GetSource(t *testing.T) {

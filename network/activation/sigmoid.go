@@ -2,7 +2,8 @@ package activation
 
 import (
 	"math"
-	"neural-net-go/matutil"
+
+	"github.com/benjohns1/neural-net-go/matutil"
 
 	"gonum.org/v1/gonum/mat"
 )

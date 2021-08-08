@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"neural-net-go/network"
-	"neural-net-go/storage"
 	"os"
 	"time"
+
+	"github.com/benjohns1/neural-net-go/network"
+	"github.com/benjohns1/neural-net-go/storage"
 
 	"gonum.org/v1/gonum/mat"
 )
